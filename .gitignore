@@ -1,0 +1,7 @@
+*.pyc
+best_epochs
+ckpt
+vis
+result
+test_files
+__pycache__
