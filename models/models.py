@@ -321,7 +321,7 @@ class SkipConv(nn.Module):
         return self.block(x)
 
 
-class SAUNet(nn.Module): #haunet
+class SAUNet(nn.Module): #SAUNet
     def __init__(self, num_classes=4, num_filters=32, pretrained=True, is_deconv=True):
         super(AlbuNet, self).__init__()
 
