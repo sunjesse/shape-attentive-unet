@@ -20,7 +20,7 @@ from lib.utils import as_numpy
 import lib.utils.data as torchdata
 import cv2
 from tqdm import tqdm
-from loss import ACLoss
+from loss import DualLoss
 import random
 from PIL import Image, ImageOps
 from skimage import transform
@@ -99,10 +99,6 @@ def evaluate(sm1, sm2, sm3, sm4, sm5, loader_val, args):
     time_meter = AverageMeter()
 
     sm1.eval()
-    #sm2.eval()
-    #sm3.eval()
-    #sm4.eval()
-    #sm5.eval()
 
     pbar = tqdm(total=len(loader_val))
     for batch_data in loader_val:
@@ -118,11 +114,6 @@ def evaluate(sm1, sm2, sm3, sm4, sm5, loader_val, args):
 
                 # forward pass
                 p1 = sm1(slice_data, epoch=0, segSize=True)
-                #p2 = sm2(slice_data, epoch=0, segSize=True)
-                #p3 = sm3(slice_data, epoch=0, segSize=True)
-                #p4 = sm4(slice_data, epoch=0, segSize=True)
-                #p5 = sm5(slice_data, epoch=0, segSize=True)
-                #scores = (p1+p2+p3+p4+p5)/5 
                 scores = p1
 
                 _, pred = torch.max(scores, dim=1)
@@ -148,45 +139,13 @@ def main(args):
     # Network Builders
     builder = ModelBuilder()
 
-    unet = None
-    net_encoder = None
-    net_decoder = None
-
     unet1 = builder.build_unet(num_class=args.num_class,
         arch=args.arch_unet,
         weights=args.weights_unet1)
-    '''
-    unet2 = builder.build_unet(num_class=args.num_class,
-        arch=args.arch_unet,
-        weights=args.weights_unet2)
-
-    unet3 = builder.build_unet(num_class=args.num_class,
-        arch=args.arch_unet,
-        weights=args.weights_unet3)
-
-    unet4 = builder.build_unet(num_class=args.num_class,
-        arch=args.arch_unet,
-        weights=args.weights_unet4)
-
-    unet5 = builder.build_unet(num_class=args.num_class,
-        arch=args.arch_unet,
-        weights=args.weights_unet5)
-    '''
-    #crit = nn.NLLLoss()
-    crit = ACLoss()
+    crit = DualLoss()
 
     sm1 = SegmentationModule(net_encoder, net_decoder, crit,
                                               is_unet=args.unet, unet=unet1)
-    '''
-    sm2 = SegmentationModule(net_encoder, net_decoder, crit,
-                                              is_unet=args.unet, unet=unet2)
-    sm3 = SegmentationModule(net_encoder, net_decoder, crit,
-                                              is_unet=args.unet, unet=unet3)
-    sm4 = SegmentationModule(net_encoder, net_decoder, crit,
-                                              is_unet=args.unet, unet=unet4)
-    sm5 = SegmentationModule(net_encoder, net_decoder, crit,
-                                              is_unet=args.unet, unet=unet5)
-    '''
     test_augs = ComposeTest([PaddingCenterCropTest(256)])
     ac17 = AC17(
             root=args.data_root,
@@ -202,10 +161,6 @@ def main(args):
         drop_last=True)
 
     sm1.cuda()
-    #sm2.cuda()
-    #sm3.cuda()
-    #sm4.cuda()
-    #sm5.cuda()
 
     # Main loop
     evaluate(sm1, None, None, None, None, loader_val, args)
@@ -217,14 +172,12 @@ if __name__ == '__main__':
     assert LooseVersion(torch.__version__) >= LooseVersion('0.4.0'), \
         'PyTorch>=0.4.0 is required'
 
-    DATA_ROOT = os.getenv('DATA_ROOT', '/home/rexma/Desktop/MRI_Images/AC17')
+    DATA_ROOT = os.getenv('DATA_ROOT', '/PATH/TO/AC17/DATA')
 
     parser = argparse.ArgumentParser()
     # Model related arguments
     parser.add_argument('--id', required=True,
                         help="a name for identifying the model to load")
-    #parser.add_argument('--suffix', default='_epoch_20.pth',
-    #                    help="which snapshot to load")
     parser.add_argument('--arch_encoder', default='resnet50dilated',
                         help="architecture of net_encoder")
     parser.add_argument('--arch_decoder', default='ppm_deepsup',
@@ -260,17 +213,17 @@ if __name__ == '__main__':
     parser.add_argument('--imgMaxSize', default=128, type=int)
     parser.add_argument('--k_split', default=1)
     # Misc argument
-    parser.add_argument('--ckpt', default='/home/rexma/Desktop/JesseSun/ac17_seg/ckpt',
+    parser.add_argument('--ckpt', default='./ckpt',
                         help='folder to output checkpoints')
     parser.add_argument('--visualize', default=True, action='store_true',
                         help='output visualization?')
-    parser.add_argument('--result', default='/home/rexma/Desktop/JesseSun/ac17_seg/result',
+    parser.add_argument('--result', default='./result',
                         help='folder to output visualization results')
     parser.add_argument('--gpu', default=0, type=int,
                         help='gpu id for evaluation')
     parser.add_argument('--show_SRmap', default=True, type=bool,
                         help='Show the saliency relevance mapping')
-    parser.add_argument('--save_test_path', default='/home/rexma/Desktop/JesseSun/ac17_seg/test_files')
+    parser.add_argument('--save_test_path', default='./test_files')
 
     args = parser.parse_args()
     args.arch_encoder = args.arch_encoder.lower()
@@ -291,16 +244,7 @@ if __name__ == '__main__':
 
     else:
         args.weights_unet1 = args.checkpoint1
-        #args.weights_unet2 = args.checkpoint2
-        #args.weights_unet3 = args.checkpoint3 
-        #args.weights_unet4 = args.checkpoint4 
-        #args.weights_unet5 = args.checkpoint5
-
         assert os.path.exists(args.weights_unet1), 'checkpoint1 does not exist!'
-        #assert os.path.exists(args.weights_unet2), 'checkpoint2 does not exist!'
-        #assert os.path.exists(args.weights_unet3), 'checkpoint3 does not exist!'
-        #assert os.path.exists(args.weights_unet4), 'checkpoint4 does not exist!'
-        #assert os.path.exists(args.weights_unet5), 'checkpoint5 does not exist!'
 
     args.result = os.path.join(args.result, args.id)
     if not os.path.isdir(args.result):

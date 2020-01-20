@@ -2,26 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from typing import List
-from torch import Tensor, einsum
-from utils_sl import simplex, one_hot, class2one_hot, one_hot2dist
 from config import cfg
-
-class SurfaceLoss():
-    def __init__(self, **kwargs):
-        super(SurfaceLoss, self).__init__()
-        # Self.idc is used to filter out some classes of the target mask. Use fancy indexing
-        self.idc: List[int] = kwargs["idc"]
-        print(f"Initialized {self.__class__.__name__} with {kwargs}")
-
-    def __call__(self, probs: Tensor, dist_maps: Tensor) -> Tensor:
-        assert simplex(probs)
-        assert not one_hot(dist_maps)
-        pc = probs.type(torch.float32)
-        dc = dist_maps.type(torch.float32).cuda()
-
-        multipled = einsum("bcwh,bcwh->bcwh", pc, dc)
-        loss = multipled.mean()
-        return loss
 
 class ImageBasedCrossEntropyLoss2d(nn.Module):
 
@@ -140,9 +121,9 @@ class LabelSmoothSoftmaxCE(nn.Module):
         return loss
 
 
-class ACLoss(nn.Module):
+class DualLoss(nn.Module):
     def __init__(self, num_classes=4, lmbda=10, epsilon=10e-6, mode="train"):
-        super(ACLoss, self).__init__()
+        super(DualLoss, self).__init__()
         self.epsilon = epsilon
         self.lmbda = lmbda
         self.channels = num_classes 
@@ -176,17 +157,6 @@ class ACLoss(nn.Module):
         #att = self.edge_attention(seg, seg_t, edge_in)
 
         return dice + ce + edge# + 0.1*att
-        '''
-        pred = nn.functional.softmax(pred, 1)
-        one_hot = self.index_to_bitmask(target).float().cpu() #class2one_hot(target.cpu(), self.channels)
-        dist_maps = torch.from_numpy(one_hot2dist(one_hot.float().numpy()))
-        sl = self.SurfaceLoss(pred, dist_maps)
-        if self.epoch < epoch and self.alpha > 0.02:
-            self.epoch += 1
-            self.alpha -= 0.02
-            print("Alpha: " + str(self.alpha))
-        return dice + sl
-        '''
 
     def index_to_bitmask(self, target):
         assert len(target.shape) == 3 #NHW

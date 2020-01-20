@@ -81,7 +81,7 @@ class AC17Data(data.Dataset):
 
     def read_files(self):
         d = []
-        txt_file = os.path.join('/home/rexma/Desktop/JesseSun//ac17_seg/data/data_series.txt')
+        txt_file = os.path.join('./data/data_series.txt')
         split_range = list(range((self.k_split-1)*self.split_len, self.k_split*self.split_len))
         with open(txt_file, 'r') as f:
             for i, line in enumerate(f):
@@ -138,16 +138,12 @@ class AC17Data(data.Dataset):
             seg_c = np.zeros((seg.shape[0], self.target_size[0], self.target_size[1]))
 
             for z in range(img.shape[0]):
-                #mu = img[z].mean()
-                #sigma = img[z].std()
                 if img[z].min() > 0:
                     img[z] -= img[z].min()
 
                 img_tmp, seg_tmp = self.augmentations(img[z].astype(np.uint32), seg[z].astype(np.uint8))
                 img_tmp = augment_gamma(img_tmp)
 
-                #img_tmp = (img_tmp - img_tmp.min())/(img_tmp.max() - img_tmp.min() + 1e-10)
-                #img_tmp = (img_tmp - 0.5)*2.0
                 mu = img_tmp.mean()
                 sigma = img_tmp.std()
                 img_tmp = (img_tmp - mu) / (sigma+1e-10)
@@ -156,16 +152,7 @@ class AC17Data(data.Dataset):
 
             img = img_c.transpose(1,2,0)
             seg = seg_c.transpose(1,2,0)
-        '''
-        if self.img_norm:
-            img = (img - img.min())/(img.max() - img.min() + 1e-10)
-            img = (img - 0.5)*2.0
-            #mu = img.mean()
-            #sigma = img.std()
-            #img = (img-mu)/sigma
-        '''
 
-        #img, seg = self._transform(img, seg)
         img = torch.from_numpy(img).float()
         seg = torch.from_numpy(seg).long()
 
@@ -318,7 +305,7 @@ class AC17_2DLoad():
 
 if __name__ == '__main__':
 
-    DATA_DIR = "/home/rexma/Desktop/MRI_Images/AC17"
+    DATA_DIR = "/PATH/TO/AC17/DATA" 
     augs = Compose([PaddingCenterCrop(352)])
     dataset = AC17Data(DATA_DIR, augmentations=augs)
     ac17 = AC17_2DLoad(dataset)

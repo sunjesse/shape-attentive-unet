@@ -32,7 +32,7 @@ class AC17Test(data.Dataset):
 
     def read_files(self):
         d = []
-        txt_file = os.path.join('/home/rexma/Desktop/JesseSun/ac17_seg/data/test_series.txt')
+        txt_file = os.path.join('./data/test_series.txt')
         with open(txt_file, 'r') as f:
             for i, line in enumerate(f):
                 l = line.split(' ')
@@ -105,7 +105,7 @@ class AC17Test(data.Dataset):
         return img
 
 if __name__ == '__main__':
-    DATA_DIR = "/home/rexma/Desktop/MRI_Images/AC17"
+    DATA_DIR = "/PATH/TO/AC17/DATA"
     augs = ComposeTest([PaddingCenterCropTest(224)])
     ac17 = AC17Test(DATA_DIR, augmentations=augs)
     dloader = torch.utils.data.DataLoader(ac17, batch_size=1)

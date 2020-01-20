@@ -19,7 +19,7 @@ from lib.nn import UserScatteredDataParallel, async_copy_to,  user_scattered_col
 import lib.utils.data as torchdata
 from lib.utils import as_numpy
 import numpy as np
-from loss import ACLoss
+from loss import DualLoss
 from radam import RAdam
 
 def eval(loader_val, segmentation_module, args, crit):
@@ -33,30 +33,28 @@ def eval(loader_val, segmentation_module, args, crit):
         seg_label = as_numpy(batch_data["mask"][0])
         torch.cuda.synchronize()
         batch_data["image"] = batch_data["image"].unsqueeze(0).cuda()
-        #batch_data["mask"][0] = batch_data["mask"][0].cuda()
-        #batch_data["mask"][1] = batch_data["mask"][1].cuda()
 
         with torch.no_grad():
             segSize = (seg_label.shape[0], seg_label.shape[1])
             scores = torch.zeros(1, args.num_class, segSize[0], segSize[1])
             scores = async_copy_to(scores, args.gpu)
             feed_dict = batch_data.copy()
-            #print(torch.max(feed_dict['image']))   
-        
+            #print(torch.max(feed_dict['image']))
+
             # forward pass
-            scores_tmp, loss = segmentation_module(feed_dict, epoch=0, segSize=segSize)   
+            scores_tmp, loss = segmentation_module(feed_dict, epoch=0, segSize=segSize)
             scores = scores + scores_tmp  / len(args.imgSize)
             loss_meter.update(loss)
 
             _, pred = torch.max(scores, dim=1)
             pred = as_numpy(pred.squeeze(0).cpu())
-                #print(np.amax(pred))
+
         torch.cuda.synchronize()
         # calculate accuracy
         intersection, union = intersectionAndUnion(pred, seg_label, args.num_class)
         intersection_meter.update(intersection)
         union_meter.update(union)
-        
+
     # summary
     iou = intersection_meter.sum / (union_meter.sum + 1e-10)
     for i, _iou in enumerate(iou):
@@ -64,7 +62,7 @@ def eval(loader_val, segmentation_module, args, crit):
             print('class [{}], IoU: {:.4f}'.format(i, _iou))
     print('loss: {:.4f}'.format(loss_meter.average()))
     return iou[1:], loss_meter.average()
-    
+
 # train one epoch
 def train(segmentation_module, loader_train, optimizers, history, epoch, args):
 
@@ -77,7 +75,7 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
     ave_j3 = AverageMeter()
 
     segmentation_module.train(not args.fix_bn)
-    
+
     # main loop
     tic = time.time()
     iter_count = 0
@@ -87,7 +85,7 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
         args.running_lr_encoder = args.lr_encoder * scale_running_lr
         for param_group in optimizers[0].param_groups:
             param_group['lr'] = args.running_lr_encoder
-    
+
     for batch_data in loader_train:
         data_time.update(time.time() - tic)
         batch_data["image"] = batch_data["image"].cuda()
@@ -95,12 +93,12 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
         # forward pass
         loss, acc = segmentation_module(batch_data, epoch)
         loss = loss.mean()
-        
+
         jaccard = acc[1]
         for j in jaccard:
             j = j.float().mean()
         acc = acc[0].float().mean()
-        
+
         # Backward
         loss.backward()
         for optimizer in optimizers:
@@ -109,7 +107,7 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
         # measure elapsed time
         batch_time.update(time.time() - tic)
         tic = time.time()
-        iter_count += args.batch_size_per_gpu 
+        iter_count += args.batch_size_per_gpu
 
         # update average loss and acc
         ave_total_loss.update(loss.data.item())
@@ -118,7 +116,7 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
         ave_j1.update(jaccard[0].data.item()*100)
         ave_j2.update(jaccard[1].data.item()*100)
         ave_j3.update(jaccard[2].data.item()*100)
-            
+
         if iter_count % (args.batch_size_per_gpu*10) == 0:
             # calculate accuracy, and display
             if args.unet==False:
@@ -131,14 +129,14 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
                         ave_acc.average(), ave_total_loss.average()))
             else:
                 print('Epoch: [{}/{}], Iter: [{}], Time: {:.2f}, Data: {:.2f},'
-                        ' lr_unet: {:.6f}, Accuracy: {:4.2f}, Jaccard: [{:4.2f},{:4.2f},{:4.2f}], ' 
+                        ' lr_unet: {:.6f}, Accuracy: {:4.2f}, Jaccard: [{:4.2f},{:4.2f},{:4.2f}], '
                         'Loss: {:.6f}'
                         .format(epoch, args.max_iters, iter_count,
                             batch_time.average(), data_time.average(),
                             args.running_lr_encoder, ave_acc.average(),
                             ave_j1.average(), ave_j2.average(),
                             ave_j3.average(), ave_total_loss.average()))
-    
+
     #Average jaccard across classes.
     j_avg = (ave_j1.average() + ave_j2.average() + ave_j3.average())/3
 
@@ -157,16 +155,16 @@ def checkpoint(nets, history, args, epoch_num):
         (unet, crit) = nets
     else:
         (net_encoder, net_decoder, crit) = nets
-    
+
     suffix_latest = 'epoch_{}.pth'.format(epoch_num)
-    
+
     torch.save(history,
                '{}/history_{}'.format(args.ckpt, suffix_latest))
     if args.unet:
         dict_unet = unet.state_dict()
         torch.save(dict_unet,
                     '{}/unet_{}'.format(args.ckpt, suffix_latest))
-    else:    
+    else:
         dict_encoder = net_encoder.state_dict()
         dict_decoder = net_decoder.state_dict()
 
@@ -175,8 +173,6 @@ def checkpoint(nets, history, args, epoch_num):
         torch.save(dict_decoder,
                    '{}/decoder_{}'.format(args.ckpt, suffix_latest))
 
-    # dict_encoder_save = {k: v for k, v in dict_encoder.items() if not (k.endswith('_tmp_running_mean') or k.endswith('tmp_running_var'))}
-    # dict_decoder_save = {k: v for k, v in dict_decoder.items() if not (k.endswith('_tmp_running_mean') or k.endswith('tmp_running_var'))}
 
 
 def group_weight(module):
@@ -197,61 +193,35 @@ def group_weight(module):
             if m.bias is not None:
                 group_no_decay.append(m.bias)
 
-    #ssert len(list(module.parameters())) == len(group_decay) + len(group_no_decay)
     groups = [dict(params=group_decay), dict(params=group_no_decay, weight_decay=.0)]
     return groups
 
 
 def create_optimizers(nets, args):
-    if args.unet == False:
-        (net_encoder, net_decoder, crit) = nets
-        optimizer_encoder = torch.optim.SGD(
-            group_weight(net_encoder),
-            lr=args.lr_encoder,
-            momentum=args.beta1,
-            weight_decay=args.weight_decay)
-        optimizer_decoder = torch.optim.SGD(
-            group_weight(net_decoder),
-            lr=args.lr_decoder,
-            momentum=args.beta1,
-            weight_decay=args.weight_decay)
-        return (optimizer_encoder, optimizer_decoder)
-    else:
-        (unet, crit) = nets
-        '''
-        optimizer_unet = torch.optim.Adam(
-            group_weight(unet),
-            lr = args.lr_encoder,
-            betas=(0.9, 0.999))
-        optimizer_unet = torch.optim.SGD(
-                group_weight(unet),
-                lr=args.lr_encoder,
-                momentum=args.beta1,
-                weight_decay=args.weight_decay,
-                nesterov=False)
-        '''
-        optimizer_unet = RAdam(
-                group_weight(unet),
-                lr=args.lr_encoder,
-                betas=(0.9, 0.999))
-        return [optimizer_unet]
+    (unet, crit) = nets
+    '''
+    optimizer_unet = torch.optim.Adam(
+        group_weight(unet),
+        lr = args.lr_encoder,
+        betas=(0.9, 0.999))
+    optimizer_unet = torch.optim.SGD(
+        group_weight(unet),
+        lr=args.lr_encoder,
+        momentum=args.beta1,
+        weight_decay=args.weight_decay,
+        nesterov=False)
+    '''
+    optimizer_unet = RAdam(
+        group_weight(unet),
+        lr=args.lr_encoder,
+        betas=(0.9, 0.999))
+    return [optimizer_unet]
 
 
 def adjust_learning_rate(optimizers, cur_iter, args):
-    #if cur_iter <= int(args.num_epoch*0.9):
-    #    scale_running_lr = ((1. - float(cur_iter) / (args.num_epoch)) ** args.lr_pow)
-    #else:
-    #    scale_running_lr = ((1. - args.num_epoch*0.9 / (args.num_epoch)) ** args.lr_pow)
     scale_running_lr = 0.5*(1+math.cos(3.14159*(cur_iter)/args.num_epoch))
-    '''
-    if cur_iter % 40 != 0:
-        return
-    p = cur_iter/40
-    scale_running_lr = 0.1**p
-    '''
     args.running_lr_encoder = args.lr_encoder * scale_running_lr
-    args.running_lr_decoder = args.lr_decoder * scale_running_lr
-    
+
     optimizer_unet = optimizers[0]
     for param_group in optimizer_unet.param_groups:
         param_group['lr'] = args.running_lr_encoder
@@ -259,46 +229,26 @@ def adjust_learning_rate(optimizers, cur_iter, args):
 def main(args):
     # Network Builders
     builder = ModelBuilder()
-    net_encoder=None
-    net_decoder=None
     unet=None
-    
-    if args.unet == False:
-        net_encoder = builder.build_encoder(
-            arch=args.arch_encoder,
-            fc_dim=args.fc_dim,
-            weights=args.weights_encoder)
-        net_decoder = builder.build_decoder(
-            arch=args.arch_decoder,
-            fc_dim=args.fc_dim,
-            num_class=args.num_class,
-            weights=args.weights_decoder)
-    else:
-        unet = builder.build_unet(num_class=args.num_class, 
-            arch=args.unet_arch,
-            weights=args.weights_unet)
 
-        print("Froze the following layers: ")
-        for name, p in unet.named_parameters():
-            if p.requires_grad == False:
-                print(name)
-        print()
-    
-    crit = ACLoss(mode="train")
-    #crit = nn.CrossEntropyLoss().cuda()
-    #crit = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(50))
-    #crit = nn.CrossEntropyLoss().cuda()
-    #crit = nn.BCELoss()
+    unet = builder.build_unet(num_class=args.num_class,
+        arch=args.unet_arch,
+        weights=args.weights_unet)
 
-    if args.arch_decoder.endswith('deepsup') and args.unet == False:
-        segmentation_module = SegmentationModule(
-            net_encoder, net_decoder, crit, args.deep_sup_scale)
-    else:
-        segmentation_module = SegmentationModule(
-            net_encoder, net_decoder,  crit, is_unet=args.unet, unet=unet)
+    print("Froze the following layers: ")
+    for name, p in unet.named_parameters():
+        if p.requires_grad == False:
+            print(name)
+    print()
+
+    crit = DualLoss(mode="train")
+
+    segmentation_module = SegmentationModule(
+        net_encoder, net_decoder,  crit, is_unet=args.unet, unet=unet)
 
     train_augs = Compose([PaddingCenterCrop(256), RandomHorizontallyFlip(), RandomVerticallyFlip(), RandomRotate(180)])
     test_augs = Compose([PaddingCenterCrop(256)])
+
     # Dataset and Loader
     dataset_train = AC17(
             root=args.data_root,
@@ -307,11 +257,11 @@ def main(args):
             augmentations=train_augs,
             img_norm=args.img_norm)
     ac17_train = load2D(dataset_train, split='train', deform=True)
-    
+
     loader_train = data.DataLoader(
         ac17_train,
         batch_size=args.batch_size_per_gpu,  # we have modified data_parallel
-        shuffle=True, 
+        shuffle=True,
         num_workers=int(args.workers),
         drop_last=True,
         pin_memory=True)
@@ -329,8 +279,6 @@ def main(args):
         collate_fn=user_scattered_collate,
         num_workers=5,
         drop_last=True)
-    # create loader iterator
-    #iterator_train = iter(loader_train)
 
     # load nets into gpu
     if len(args.gpus) > 1:
@@ -340,7 +288,7 @@ def main(args):
         # For sync bn
         patch_replication_callback(segmentation_module)
     segmentation_module.cuda()
-    
+
     # Set up optimizers
     nets = (net_encoder, net_decoder, crit) if args.unet == False else (unet, crit)
     optimizers = create_optimizers(nets, args)
@@ -373,12 +321,12 @@ def main(args):
             best_val['epoch_3'] = epoch
             best_val['mIoU_3'] = iou[2]
             ckpted = True
-        
+
         if (iou[0]+iou[1]+iou[2])/3 > best_val['mIoU']:
             best_val['epoch'] = epoch
             best_val['mIoU'] = (iou[0]+iou[1]+iou[2])/3
             ckpted = True
-        
+
         if epoch % 50 == 0:
             checkpoint(nets, history, args, epoch)
             continue
@@ -394,18 +342,15 @@ def main(args):
             checkpoint(nets, history, args, epoch)
             continue
         print()
-    
-    #print("[Val] Class 1: Epoch " + str(best_val['epoch_1']) + " had the best mIoU of " + str(best_val['mIoU_1']) + ".")
-    #print("[Val] Class 2: Epoch " + str(best_val['epoch_2']) + " had the best mIoU of " + str(best_val['mIoU_2']) + ".")
-    #print("[Val] Class 3: Epoch " + str(best_val['epoch_3']) + " had the best mIoU of " + str(best_val['mIoU_3']) + ".")
+
     print('Training Done!')
 
 
 if __name__ == '__main__':
     assert LooseVersion(torch.__version__) >= LooseVersion('0.4.0'), \
         'PyTorch>=0.4.0 is required'
-    
-    DATA_ROOT = os.getenv('DATA_ROOT', '/home/rexma/Desktop/MRI_Images/AC17')
+
+    DATA_ROOT = os.getenv('DATA_ROOT', '/PATH/TO/AC17/DATA')
     DATASET_NAME = "AC17"
 
     parser = argparse.ArgumentParser()
@@ -414,20 +359,16 @@ if __name__ == '__main__':
                         help="a name for identifying the model")
     parser.add_argument('--unet', default=True,
                         help="use unet?")
-    parser.add_argument('--unet_arch', default='albunet',
+    parser.add_argument('--unet_arch', default='saunet',
                         help="UNet architecture")
     parser.add_argument('--arch_encoder', default='resnet50dilated',
                         help="architecture of net_encoder")
     parser.add_argument('--arch_decoder', default='ppm_deepsup',
                         help="architecture of net_decoder")
-    parser.add_argument('--weights_encoder', default='/home/rexma/Desktop/seg/encoder_epoch_20.pth',
-                        help="weights to finetune net_encoder")
     parser.add_argument('--weights_decoder', default='',
                         help="weights to finetune net_decoder")
     parser.add_argument('--weights_unet', default='',
                         help="weights to finetune unet")
-    parser.add_argument('--fc_dim', default=2048, type=int,
-                        help='number of features between encoder and decoder')
 
     # Path related arguments
     parser.add_argument('--data-root', type=str, default=DATA_ROOT)
@@ -446,7 +387,6 @@ if __name__ == '__main__':
                         help='iterations of each epoch (irrelevant to batch size)')
     parser.add_argument('--optim', default='Adam', help='optimizer')
     parser.add_argument('--lr_encoder', default=0.0005, type=float, help='LR')
-    parser.add_argument('--lr_decoder', default=0.05, type=float, help='LR')
     parser.add_argument('--lr_pow', default=0.9, type=float,
                         help='power in poly to drop LR')
     parser.add_argument('--beta1', default=0.9, type=float,
@@ -468,11 +408,11 @@ if __name__ == '__main__':
 
     # Misc arguments
     parser.add_argument('--seed', default=304, type=int, help='manual seed')
-    parser.add_argument('--ckpt', default='/home/rexma/Desktop/JesseSun/ac17_seg/ckpt',
+    parser.add_argument('--ckpt', default='./ac17_seg/ckpt',
                         help='folder to output checkpoints')
     parser.add_argument('--disp_iter', type=int, default=20,
                         help='frequency to display')
-    
+
 
 
     args = parser.parse_args()
@@ -490,11 +430,10 @@ if __name__ == '__main__':
 
     args.max_iters = args.num_epoch
     args.running_lr_encoder = args.lr_encoder
-    args.running_lr_decoder = args.lr_decoder
 
     args.arch_encoder = args.arch_encoder.lower()
     args.arch_decoder = args.arch_decoder.lower()
-        
+
     args.imgSize = [128]
 
     # Model ID
@@ -505,21 +444,14 @@ if __name__ == '__main__':
         args.id += '-' + str(args.unet_arch)
 
     args.id += '-ngpus' + str(num_gpus)
-    args.id += '-batchSize' + str(args.batch_size) 
-    
-    if args.unet == False:
-        args.id += '-LR_encoder' + str(args.lr_encoder)
-        args.id += '-LR_decoder' + str(args.lr_decoder)
-    else:
-        args.id += '-LR_unet' + str(args.lr_encoder)
-        
+    args.id += '-batchSize' + str(args.batch_size)
+
+    args.id += '-LR_unet' + str(args.lr_encoder)
+
     args.id += '-epoch' + str(args.num_epoch)
     if args.fix_bn:
         args.id += '-fixBN'
     print('Model ID: {}'.format(args.id))
-
-    # FIRST TIME WE TRAINING IT, LOAD THE PRETRAINED WEIGHTS OF ENCODER FROM IMAGENET.
-    #args.weights_encoder = '/home/sunjesse/scratch/seg/encoder_epoch_20.pth'
 
     args.ckpt = os.path.join(args.ckpt, args.id)
     if not os.path.isdir(args.ckpt):

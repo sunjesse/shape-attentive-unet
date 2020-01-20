@@ -24,7 +24,7 @@ class VanillaBackprop():
         def hook_function(module, grad_in, grad_out):
             self.gradients = grad_in[0]
             self.grad_out = grad_out[0]
-        
+
         # Register hook to the first layer
         #print(list(self.model.modules())[0])
         first_layer = self.model.conv1[0]
@@ -36,19 +36,17 @@ class VanillaBackprop():
         # Zero grads
         self.model.zero_grad()
         # Target for backprop
-        
+
         tmp = []
         for i in range(2):
             tmp.append((target==i).unsqueeze(0).float())
         one_hot_output = torch.cat(tmp, dim=0).float().unsqueeze(0)
-       
+
         #one_hot_output.requires_grad = True
         # Backward pass
         model_output.backward(gradient=one_hot_output)
-        
+
         # Convert Pytorch variable to numpy array
         # [0] to get rid of the first channel (1,3,224,224)
         gradients_as_arr = self.gradients.cpu().data.numpy()[0]
         return gradients_as_arr
-
-
