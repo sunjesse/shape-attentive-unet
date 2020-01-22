@@ -34,18 +34,18 @@ def undo_crop(img, pred): #img is original image:w
     w, h = img.size
     tw, th = pred.size
     if w >= tw and h >= th:  # crop a center patch
-        x1 = int(round_num((w - tw) / 2.)) 
-        y1 = int(round_num((h - th) / 2.)) 
+        x1 = int(round_num((w - tw) / 2.))
+        y1 = int(round_num((h - th) / 2.))
         rem_x = (w - tw) % 2
         rem_y = (h - th) % 2
         border = [x1, y1, x1-rem_x, y1-rem_y]
         return np.array(ImageOps.expand(pred, tuple(border), fill=0))
-         
+
     else:  # pad zeros and do center crop
         pad_h = max(th - h, 0)
         pad_w = max(tw - w, 0)
         b = [pad_w//2, pad_h//2, pad_w//2 + w, pad_h//2+h]
-        
+
         if pad_w == 0:
             b[2] = tw
         if pad_h == 0:
@@ -58,7 +58,7 @@ def undo_crop(img, pred): #img is original image:w
         rem_h = (h - th) % 2 if (h-th) >= 0 else 0
         border = [x1, y1, x1-rem_w, y1-rem_h]
         return np.array(ImageOps.expand(pred, tuple(border), fill=0))
-    
+
 def resample_to_orig(data, pred):
     #uncrop
     p_stack = np.zeros_like(data["post_scale"])
@@ -77,7 +77,7 @@ def resample_to_orig(data, pred):
 
 def visualize_result(data, pred, args):
     (img, info) = data
-    
+
     #normalize image to [0, 1] first.
     img = (img - img.min())/(img.max()-img.min())
     img = (img * 255).astype(np.uint8) #Then scale it up to [0, 255] to get the final image.
@@ -95,10 +95,10 @@ def save_as_nifti(pred, path, name):
     img.to_filename(os.path.join(path, str(name)+'.nii.gz'))
     print("Saved " + str(name) + "!")
 
-def evaluate(sm1, sm2, sm3, sm4, sm5, loader_val, args):
+def evaluate(sm, loader_val, args):
     time_meter = AverageMeter()
 
-    sm1.eval()
+    sm.eval()
 
     pbar = tqdm(total=len(loader_val))
     for batch_data in loader_val:
@@ -113,18 +113,17 @@ def evaluate(sm1, sm2, sm3, sm4, sm5, loader_val, args):
                 feed_dict = batch_data.copy()
 
                 # forward pass
-                p1 = sm1(slice_data, epoch=0, segSize=True)
-                scores = p1
+                p1 = sm(slice_data, epoch=0, segSize=True)
 
-                _, pred = torch.max(scores, dim=1)
+                _, pred = torch.max(p1, dim=1)
                 pred = as_numpy(pred.squeeze(0).cpu())
                 pred_volume[:,:,z] = pred
-                
+
             time_meter.update(time.perf_counter() - tic)
         pv_resized = resample_to_orig(batch_data, pred_volume)
         save_as_nifti(pv_resized, args.save_test_path, batch_data["name"])
         if args.visualize:
-            for z in range(batch_data['orig'].shape[-1]): 
+            for z in range(batch_data['orig'].shape[-1]):
                 visualize_result(
                         (batch_data['orig'][:,:,z], batch_data["name"]+str(z)),
                         pv_resized[:,:, z], args)
@@ -139,19 +138,20 @@ def main(args):
     # Network Builders
     builder = ModelBuilder()
 
-    unet1 = builder.build_unet(num_class=args.num_class,
+    unet = builder.build_unet(num_class=args.num_class,
         arch=args.arch_unet,
         weights=args.weights_unet1)
-    crit = DualLoss()
 
-    sm1 = SegmentationModule(net_encoder, net_decoder, crit,
-                                              is_unet=args.unet, unet=unet1)
+    crit = DualLoss(mode='val')
+
+    sm = SegmentationModule(crit, unet)
     test_augs = ComposeTest([PaddingCenterCropTest(256)])
+
     ac17 = AC17(
             root=args.data_root,
             augmentations=test_augs,
             img_norm=args.img_norm)
-    
+
     loader_val = data.DataLoader(
         ac17,
         batch_size=1,
@@ -160,10 +160,10 @@ def main(args):
         num_workers=5,
         drop_last=True)
 
-    sm1.cuda()
+    sm.cuda()
 
     # Main loop
-    evaluate(sm1, None, None, None, None, loader_val, args)
+    evaluate(sm, loader_val, args)
 
     print('Evaluation Done!')
 
@@ -178,18 +178,10 @@ if __name__ == '__main__':
     # Model related arguments
     parser.add_argument('--id', required=True,
                         help="a name for identifying the model to load")
-    parser.add_argument('--arch_encoder', default='resnet50dilated',
-                        help="architecture of net_encoder")
-    parser.add_argument('--arch_decoder', default='ppm_deepsup',
-                        help="architecture of net_decoder")
-    parser.add_argument('--fc_dim', default=2048, type=int,
-                        help='number of features between encoder and decoder')
     parser.add_argument('--unet', default=True,
                         help='Use a UNet?')
     parser.add_argument('--arch_unet', default='albunet',
                         help='UNet architecture?')
-
-    # Path related arguments
 
     # Data related arguments
     parser.add_argument('--num_val', default=-1, type=int,
@@ -198,12 +190,8 @@ if __name__ == '__main__':
                         help='number of classes')
     parser.add_argument('--batch_size', default=1, type=int,
                         help='batchsize. current only supports 1')
-    
-    parser.add_argument('--checkpoint1', type=str, required=True, help="checkpoint path")
-    parser.add_argument('--checkpoint2', type=str, help="checkpoint path")
-    parser.add_argument('--checkpoint3', type=str, help="checkpoint path")
-    parser.add_argument('--checkpoint4', type=str, help="checkpoint path")
-    parser.add_argument('--checkpoint5', type=str, help="checkpoint path")
+
+    parser.add_argument('--checkpoint', type=str, required=True, help="checkpoint path")
 
     parser.add_argument('--test-split', type=str, default='val')
     parser.add_argument('--data-root', type=str, default=DATA_ROOT)
@@ -226,25 +214,14 @@ if __name__ == '__main__':
     parser.add_argument('--save_test_path', default='./test_files')
 
     args = parser.parse_args()
-    args.arch_encoder = args.arch_encoder.lower()
-    args.arch_decoder = args.arch_decoder.lower()
+
     print("Input arguments:")
     for key, val in vars(args).items():
         print("{:16} {}".format(key, val))
 
     # absolute paths of model weights
-    if args.unet == False:
-        args.weights_encoder = os.path.join(args.ckpt, args.id,
-                                            'encoder' + args.suffix)
-        args.weights_decoder = os.path.join(args.ckpt, args.id,
-                                            'decoder' + args.suffix)
-
-        assert os.path.exists(args.weights_encoder) and \
-            os.path.exists(args.weights_encoder), 'checkpoint does not exitst!'
-
-    else:
-        args.weights_unet1 = args.checkpoint1
-        assert os.path.exists(args.weights_unet1), 'checkpoint1 does not exist!'
+    args.weights_unet = args.checkpoint
+    assert os.path.exists(args.weights_unet), 'checkpoint1 does not exist!'
 
     args.result = os.path.join(args.result, args.id)
     if not os.path.isdir(args.result):

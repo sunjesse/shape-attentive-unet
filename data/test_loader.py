@@ -81,7 +81,7 @@ class AC17Test(data.Dataset):
 
             img = img_c.transpose(1,2,0)
         img = self._transform(img)
-        
+
         if filename.endswith('01'):
             filename = filename[:-7] + 'ED'
         else:

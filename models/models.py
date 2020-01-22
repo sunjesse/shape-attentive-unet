@@ -66,6 +66,7 @@ class SegmentationModuleBase(nn.Module):
             j1 = anb1.float() / (torch.sum(v1).float() + torch.sum(pred1).float() - anb1.float() + 1e-10)
         except:
             j1 = 0
+
         #class 2
         v2 = (label == 2).long()
         pred2 = (preds == 2).long()
@@ -75,7 +76,6 @@ class SegmentationModuleBase(nn.Module):
         except:
             j2 = 0
 
-        #print(str(j1) + " " + str(j2))
         if j1 > 1:
             j1 = 0
 
@@ -91,30 +91,22 @@ class SegmentationModuleBase(nn.Module):
         except:
             j3 = 0
 
-        #print(str(j1) + " " + str(j2))
-        #print(str(j1.item()) + " " + str(j2.item()))
         j1 = j1 if j1 <= 1 else 0
         j2 = j2 if j2 <= 1 else 0
         j3 = j3 if j3 <= 1 else 0
 
-        jaccard = [j1, j2, j3] #acc_sum.float() / (pixel_sum.float() + falsePos + 1e-10)
-
-        #jaccard = torch.from_numpy(np.array(self.intersectionAndUnion(pred, label, 3)))
+        jaccard = [j1, j2, j3]
         return acc, jaccard
 
-    def jaccard(self, pred, label): #ACCURACY THAT TAKES INTO ACCOUNT BOTH TP AND FP.
-        AnB = torch.sum(pred.long() & label) #TAKE THE AND
+    def jaccard(self, pred, label):
+        AnB = torch.sum(pred.long() & label)
         return AnB/(pred.view(-1).sum().float() + label.view(-1).sum().float() - AnB)
 
 class SegmentationModule(SegmentationModuleBase):
-    def __init__(self, net_enc, net_dec, crit, is_unet=False, unet=None, deep_sup_scale=None):
+    def __init__(self, crit, unet):
         super(SegmentationModule, self).__init__()
-        self.encoder = net_enc
-        self.decoder = net_dec
         self.crit = crit
-        self.is_unet = is_unet
         self.unet = unet
-        self.deep_sup_scale = deep_sup_scale
 
     def forward(self, feed_dict, epoch, *, segSize=None):
         #training
@@ -212,18 +204,6 @@ class ModelBuilder():
             print("Loaded pretrained UNet weights.")
         print('Loaded weights for unet')
         return unet
-
-        net_decoder.apply(self.weights_init)
-        if len(weights) > 0:
-            checkpoint = torch.load(weights, map_location=lambda storage, loc: storage) #Cast dict() around when iterating through it to change values
-            for key in checkpoint:
-                if len(checkpoint[key].shape) > 0 and checkpoint[key].shape != net_decoder.state_dict()[key].shape:
-                    if checkpoint[key].shape[0] == 2 and net_decoder.state_dict()[key].shape[0] == 1:
-                        checkpoint[key] = checkpoint[key][0].unsqueeze(0)
-            net_decoder.load_state_dict(checkpoint, strict=False)
-            print('Loaded weights for net_decoder')
-        return net_decoder
-
 
 class CenterBlock(nn.Module):
     def __init__(self, in_channels, middle_channels, out_channels, is_deconv=True):

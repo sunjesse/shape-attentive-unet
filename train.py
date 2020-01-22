@@ -43,7 +43,7 @@ def eval(loader_val, segmentation_module, args, crit):
 
             # forward pass
             scores_tmp, loss = segmentation_module(feed_dict, epoch=0, segSize=segSize)
-            scores = scores + scores_tmp  / len(args.imgSize)
+            scores = scores + scores_tmp
             loss_meter.update(loss)
 
             _, pred = torch.max(scores, dim=1)
@@ -199,22 +199,23 @@ def group_weight(module):
 
 def create_optimizers(nets, args):
     (unet, crit) = nets
-    '''
-    optimizer_unet = torch.optim.Adam(
-        group_weight(unet),
-        lr = args.lr_encoder,
-        betas=(0.9, 0.999))
-    optimizer_unet = torch.optim.SGD(
-        group_weight(unet),
-        lr=args.lr_encoder,
-        momentum=args.beta1,
-        weight_decay=args.weight_decay,
-        nesterov=False)
-    '''
-    optimizer_unet = RAdam(
-        group_weight(unet),
-        lr=args.lr_encoder,
-        betas=(0.9, 0.999))
+    if args.optimizer.lower() == 'sgd':
+        optimizer_unet = torch.optim.SGD(
+            group_weight(unet),
+            lr=args.lr_encoder,
+            momentum=args.beta1,
+            weight_decay=args.weight_decay,
+            nesterov=False)
+    elif args.optimizer.lower() == 'adam':
+        optimizer_unet = torch.optim.Adam(
+            group_weight(unet),
+            lr = args.lr_encoder,
+            betas=(0.9, 0.999))
+    elif args.optimizer.lower() == 'radam':
+        optimizer_unet = RAdam(
+            group_weight(unet),
+            lr=args.lr_encoder,
+            betas=(0.9, 0.999))
     return [optimizer_unet]
 
 
@@ -229,7 +230,6 @@ def adjust_learning_rate(optimizers, cur_iter, args):
 def main(args):
     # Network Builders
     builder = ModelBuilder()
-    unet=None
 
     unet = builder.build_unet(num_class=args.num_class,
         arch=args.unet_arch,
@@ -243,35 +243,37 @@ def main(args):
 
     crit = DualLoss(mode="train")
 
-    segmentation_module = SegmentationModule(
-        net_encoder, net_decoder,  crit, is_unet=args.unet, unet=unet)
+    segmentation_module = SegmentationModule(crit, unet)
 
     train_augs = Compose([PaddingCenterCrop(256), RandomHorizontallyFlip(), RandomVerticallyFlip(), RandomRotate(180)])
     test_augs = Compose([PaddingCenterCrop(256)])
 
     # Dataset and Loader
-    dataset_train = AC17(
+    dataset_train = AC17( #Loads 3D volumes
             root=args.data_root,
             split='train',
             k_split=args.k_split,
             augmentations=train_augs,
             img_norm=args.img_norm)
-    ac17_train = load2D(dataset_train, split='train', deform=True)
+    ac17_train = load2D(dataset_train, split='train', deform=True) #Dataloader for 2D slices. Requires 3D loader.
 
     loader_train = data.DataLoader(
         ac17_train,
-        batch_size=args.batch_size_per_gpu,  # we have modified data_parallel
+        batch_size=args.batch_size_per_gpu,
         shuffle=True,
         num_workers=int(args.workers),
         drop_last=True,
         pin_memory=True)
+
     dataset_val = AC17(
             root=args.data_root,
             split='val',
             k_split=args.k_split,
             augmentations=test_augs,
             img_norm=args.img_norm)
+
     ac17_val = load2D(dataset_val, split='val', deform=False)
+
     loader_val = data.DataLoader(
         ac17_val,
         batch_size=1,
@@ -361,18 +363,11 @@ if __name__ == '__main__':
                         help="use unet?")
     parser.add_argument('--unet_arch', default='saunet',
                         help="UNet architecture")
-    parser.add_argument('--arch_encoder', default='resnet50dilated',
-                        help="architecture of net_encoder")
-    parser.add_argument('--arch_decoder', default='ppm_deepsup',
-                        help="architecture of net_decoder")
-    parser.add_argument('--weights_decoder', default='',
-                        help="weights to finetune net_decoder")
     parser.add_argument('--weights_unet', default='',
                         help="weights to finetune unet")
 
     # Path related arguments
     parser.add_argument('--data-root', type=str, default=DATA_ROOT)
-    parser.add_argument('--img-norm', default=True, action='store_true', help="normalize img value to [0, 1]")
 
     # optimization related arguments
     parser.add_argument('--gpus', default='0',
@@ -393,8 +388,6 @@ if __name__ == '__main__':
                         help='momentum for sgd, beta1 for adam')
     parser.add_argument('--weight_decay', default=1e-4, type=float,
                         help='weights regularizer')
-    parser.add_argument('--deep_sup_scale', default=0.4, type=float,
-                        help='the weight of deep supervision loss')
     parser.add_argument('--fix_bn', action='store_true',
                         help='fix bn params')
 
@@ -410,54 +403,50 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=304, type=int, help='manual seed')
     parser.add_argument('--ckpt', default='./ac17_seg/ckpt',
                         help='folder to output checkpoints')
-    parser.add_argument('--disp_iter', type=int, default=20,
-                        help='frequency to display')
 
-
+    parser.add_argument('--optimizer', default='sgd')
 
     args = parser.parse_args()
     print("Input arguments:")
     for key, val in vars(args).items():
         print("{:16} {}".format(key, val))
 
-    # Parse gpu ids
-    all_gpus = parse_devices(args.gpus)
-    all_gpus = [x.replace('gpu', '') for x in all_gpus]
-    args.gpus = [int(x) for x in all_gpus]
-    num_gpus = len(args.gpus)
-    args.batch_size = num_gpus * args.batch_size_per_gpu
-    args.gpu = 0
+    if args.optimizer.lower() in ['sgd', 'adam', 'radam']:
+        # Parse gpu ids
+        all_gpus = parse_devices(args.gpus)
+        all_gpus = [x.replace('gpu', '') for x in all_gpus]
+        args.gpus = [int(x) for x in all_gpus]
+        num_gpus = len(args.gpus)
+        args.batch_size = num_gpus * args.batch_size_per_gpu
+        args.gpu = 0
 
-    args.max_iters = args.num_epoch
-    args.running_lr_encoder = args.lr_encoder
+        args.max_iters = args.num_epoch
+        args.running_lr_encoder = args.lr_encoder
 
-    args.arch_encoder = args.arch_encoder.lower()
-    args.arch_decoder = args.arch_decoder.lower()
+        # Model ID
+        if args.unet ==False:
+            args.id += '-' + args.arch_encoder
+            args.id += '-' + args.arch_decoder
+        else:
+            args.id += '-' + str(args.unet_arch)
 
-    args.imgSize = [128]
+        args.id += '-ngpus' + str(num_gpus)
+        args.id += '-batchSize' + str(args.batch_size)
 
-    # Model ID
-    if args.unet ==False:
-        args.id += '-' + args.arch_encoder
-        args.id += '-' + args.arch_decoder
+        args.id += '-LR_unet' + str(args.lr_encoder)
+
+        args.id += '-epoch' + str(args.num_epoch)
+
+        print('Model ID: {}'.format(args.id))
+
+        args.ckpt = os.path.join(args.ckpt, args.id)
+        if not os.path.isdir(args.ckpt):
+            os.makedirs(args.ckpt)
+
+        random.seed(args.seed)
+        torch.manual_seed(args.seed)
+
+        main(args)
+
     else:
-        args.id += '-' + str(args.unet_arch)
-
-    args.id += '-ngpus' + str(num_gpus)
-    args.id += '-batchSize' + str(args.batch_size)
-
-    args.id += '-LR_unet' + str(args.lr_encoder)
-
-    args.id += '-epoch' + str(args.num_epoch)
-    if args.fix_bn:
-        args.id += '-fixBN'
-    print('Model ID: {}'.format(args.id))
-
-    args.ckpt = os.path.join(args.ckpt, args.id)
-    if not os.path.isdir(args.ckpt):
-        os.makedirs(args.ckpt)
-
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
-
-    main(args)
+        print("Invalid optimizer. Please try again with optimizer sgd, adam, or radam.")

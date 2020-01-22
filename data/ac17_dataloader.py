@@ -90,7 +90,7 @@ class AC17Data(data.Dataset):
                 # append as train set
                 if self.split == 'train' and i not in split_range:
                     d.append([key, val])
-                
+
                 #append as val set
                 elif self.split == 'val' and i in split_range:
                     d.append([key, val])
@@ -156,24 +156,10 @@ class AC17Data(data.Dataset):
         img = torch.from_numpy(img).float()
         seg = torch.from_numpy(seg).long()
 
-        diagnosis = -1
-        p_id = self.list[i][0]
-        if 1 <= p_id and p_id <= 20:
-            diagnosis = 0 #DCM
-        elif 21 <= p_id and p_id <= 40:
-            diagnosis = 1 #HCM
-        elif 41 <= p_id and p_id <= 60:
-            diagnosis = 2 #MINF
-        elif 61 <= p_id and p_id <= 80:
-            diagnosis = 3 #NOR
-        elif 81 <= p_id and p_id <= 100:
-            diagnosis = 4 #RV
-
         data_dict = {
             "name": filename,
             "image": img,
             "mask": seg,
-            "class": diagnosis
         }
 
         return data_dict
@@ -203,16 +189,16 @@ class AC17_2DLoad():
                 entry["name"] = d["name"] + "_z"+str(x)
                 entry["class"] = d["class"]
                 self.data.append(entry)
-    
+
     def __getitem__(self, i):
         #return self.data[i]
         img = self.data[i]["image"]
         seg = self.data[i]["mask"]
-       
+
         if self.split == 'train': #50% chance of deformation
             img = img.double().numpy()
             seg = seg.double().numpy()
-            
+
             if random.uniform(0, 1.0) <= 0.5 and self.deform==True:
                 if len(img.shape) == 2:
                     img = np.expand_dims(img, axis=2)
@@ -220,16 +206,16 @@ class AC17_2DLoad():
                 stacked = np.concatenate((img, seg), axis=2)
                 red = self.random_elastic_deformation(stacked, alpha=500, sigma=20).transpose(2,0,1)
                 img, seg = red[0], red[1]
-            
+
             if img.ndim == 2:
                 img = np.expand_dims(img, axis=0)
                 img = np.concatenate((img, img, img), axis=0)
             # End Random Elastic Deformation
+
             d = {"image":torch.from_numpy(img).float(),
                  "mask": (torch.from_numpy(seg),
                           self.mask_to_edges(seg)),
                  "name":self.data[i]["name"],
-                 "class":self.data[i]["class"]}
             return d
 
         elif self.split == 'val' or self.deform == False:
@@ -238,18 +224,17 @@ class AC17_2DLoad():
             d = {"image":img.float(),
                  "mask": (seg, self.mask_to_edges(seg)),
                  "name":self.data[i]["name"],
-                 "class":self.data[i]["class"]}
             return d
 
 
     def __len__(self):
         return len(self.data)
-    
+
     def mask_to_onehot(self, mask, num_classes=3):
         _mask = [mask == i for i in range(1, num_classes+1)]
         _mask = [np.expand_dims(x, 0) for x in _mask]
         return np.concatenate(_mask, 0)
-    
+
     def onehot_to_binary_edges(self, mask, radius=2, num_classes=3):
         if radius < 0:
             return mask
@@ -267,7 +252,7 @@ class AC17_2DLoad():
         edgemap = np.expand_dims(edgemap, axis=0)
         edgemap = (edgemap > 0).astype(np.uint8)
         return edgemap
-    
+
     def mask_to_edges(self, mask):
         _edge = mask
         _edge = self.mask_to_onehot(_edge)
@@ -305,7 +290,7 @@ class AC17_2DLoad():
 
 if __name__ == '__main__':
 
-    DATA_DIR = "/PATH/TO/AC17/DATA" 
+    DATA_DIR = "/PATH/TO/AC17/DATA"
     augs = Compose([PaddingCenterCrop(352)])
     dataset = AC17Data(DATA_DIR, augmentations=augs)
     ac17 = AC17_2DLoad(dataset)
