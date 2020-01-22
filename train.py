@@ -151,28 +151,15 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
 
 def checkpoint(nets, history, args, epoch_num):
     print('Saving checkpoints...')
-    if args.unet:
-        (unet, crit) = nets
-    else:
-        (net_encoder, net_decoder, crit) = nets
-
+    (unet, crit) = nets
     suffix_latest = 'epoch_{}.pth'.format(epoch_num)
 
     torch.save(history,
                '{}/history_{}'.format(args.ckpt, suffix_latest))
-    if args.unet:
-        dict_unet = unet.state_dict()
-        torch.save(dict_unet,
-                    '{}/unet_{}'.format(args.ckpt, suffix_latest))
-    else:
-        dict_encoder = net_encoder.state_dict()
-        dict_decoder = net_decoder.state_dict()
 
-        torch.save(dict_encoder,
-                   '{}/encoder_{}'.format(args.ckpt, suffix_latest))
-        torch.save(dict_decoder,
-                   '{}/decoder_{}'.format(args.ckpt, suffix_latest))
-
+    dict_unet = unet.state_dict()
+    torch.save(dict_unet,
+                '{}/unet_{}'.format(args.ckpt, suffix_latest))
 
 
 def group_weight(module):
