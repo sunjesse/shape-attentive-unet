@@ -3,9 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import numpy as np
-from . import resnet, resnext, dpn, drn
 from lib.nn import SynchronizedBatchNorm2d
-from . import convcrf as cc
 from smoothgrad import generate_smooth_grad
 from guided_backprop import GuidedBackprop
 from vanilla_backprop import VanillaBackprop
