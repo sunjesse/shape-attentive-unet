@@ -112,8 +112,8 @@ class SegmentationModule(SegmentationModuleBase):
         #training
         if segSize is None:
             p = self.unet(feed_dict['image'])
-            loss = self.crit(pred, feed_dict['mask'], epoch=epoch)
-            acc = self.pixel_acc(torch.round(nn.functional.softmax(pred[0], dim=1)).long(), feed_dict['mask'][0].long().cuda())
+            loss = self.crit(p, feed_dict['mask'], epoch=epoch)
+            acc = self.pixel_acc(torch.round(nn.functional.softmax(p[0], dim=1)).long(), feed_dict['mask'][0].long().cuda())
             return loss, acc
 
         #test
@@ -127,7 +127,7 @@ class SegmentationModule(SegmentationModuleBase):
             p = self.unet(feed_dict['image'])
             loss = self.crit((p[0], p[1]), (feed_dict['mask'][0].long().unsqueeze(0), feed_dict['mask'][1]))
             pred = nn.functional.softmax(p[0], dim=1)
-            return pred, p[1], p[2], loss
+            return pred, loss
 
     def SRP(self, model, pred, seg):
         output = pred #actual output
@@ -425,7 +425,7 @@ class SAUNet(nn.Module): #SAUNet
 
         att = F.interpolate(att, scale_factor=4, mode='bilinear', align_corners=True)
 
-        return x_out, edge_out, att
+        return x_out, edge_out#, att
 
     def pad(self, x, y):
         diffX = y.shape[3] - x.shape[3]

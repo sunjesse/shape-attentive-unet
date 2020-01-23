@@ -186,7 +186,6 @@ class AC17_2DLoad():
                 entry["image"] = d["image"].permute(2,0,1)[x]
                 entry["mask"] = d["mask"].permute(2,0,1)[x]
                 entry["name"] = d["name"] + "_z"+str(x)
-                entry["class"] = d["class"]
                 self.data.append(entry)
 
     def __getitem__(self, i):
