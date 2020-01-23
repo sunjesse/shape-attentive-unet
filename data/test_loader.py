@@ -20,7 +20,6 @@ class AC17Test(data.Dataset):
     def __init__(self,
                  root,
                  augmentations=None,
-                 img_norm=True,
                  target_size=(256, 256)
                  ):
         self.target_size = target_size

@@ -240,8 +240,7 @@ def main(args):
             root=args.data_root,
             split='train',
             k_split=args.k_split,
-            augmentations=train_augs,
-            img_norm=args.img_norm)
+            augmentations=train_augs)
     ac17_train = load2D(dataset_train, split='train', deform=True) #Dataloader for 2D slices. Requires 3D loader.
 
     loader_train = data.DataLoader(
@@ -256,8 +255,7 @@ def main(args):
             root=args.data_root,
             split='val',
             k_split=args.k_split,
-            augmentations=test_augs,
-            img_norm=args.img_norm)
+            augmentations=test_augs)
 
     ac17_val = load2D(dataset_val, split='val', deform=False)
 
@@ -388,7 +386,7 @@ if __name__ == '__main__':
 
     # Misc arguments
     parser.add_argument('--seed', default=304, type=int, help='manual seed')
-    parser.add_argument('--ckpt', default='./ac17_seg/ckpt',
+    parser.add_argument('--ckpt', default='./ckpt',
                         help='folder to output checkpoints')
 
     parser.add_argument('--optimizer', default='sgd')

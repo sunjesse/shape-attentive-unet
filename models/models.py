@@ -14,7 +14,7 @@ from misc_functions import (get_example_params,
                             save_gradient_images,
                             get_positive_negative_saliency)
 import math
-from .refine_blocks import RefineBlock
+from .attention_blocks import DualAttBlock
 from .resnet import BasicBlock as ResBlock
 from . import GSConv as gsc
 import cv2
@@ -303,7 +303,7 @@ class SkipConv(nn.Module):
 
 class SAUNet(nn.Module): #SAUNet
     def __init__(self, num_classes=4, num_filters=32, pretrained=True, is_deconv=True):
-        super(AlbuNet, self).__init__()
+        super(SAUNet, self).__init__()
 
         self.num_classes = num_classes
         print("SAUNet w/ Shape Stream")
@@ -354,10 +354,10 @@ class SAUNet(nn.Module): #SAUNet
 
         #Decoder
         self.center = conv3x3_bn_relu(1024, num_filters * 8 * 2)
-        self.dec5 = RefineBlock(inchannels=[512, 1024], outchannels=512)
-        self.dec4 = RefineBlock(inchannels=[512, 512], outchannels=256)
-        self.dec3 = RefineBlock(inchannels=[256, 256], outchannels=128)
-        self.dec2 = RefineBlock(inchannels=[128,  128], outchannels=64)
+        self.dec5 = DualAttBlock(inchannels=[512, 1024], outchannels=512)
+        self.dec4 = DualAttBlock(inchannels=[512, 512], outchannels=256)
+        self.dec3 = DualAttBlock(inchannels=[256, 256], outchannels=128)
+        self.dec2 = DualAttBlock(inchannels=[128,  128], outchannels=64)
         self.dec1 = DecoderBlock(64, 48, num_filters, is_deconv)
         self.dec0 = conv3x3_bn_relu(num_filters*2, num_filters)
 

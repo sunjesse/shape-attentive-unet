@@ -73,7 +73,6 @@ class AC17Data(data.Dataset):
         self.k = k
         self.split_len = int(200/self.k)
         self.k_split = int(k_split)
-        self.img_norm = img_norm
         self.augmentations = augmentations
         self.TRAIN_IMG_PATH = os.path.join(root, 'train', 'img')
         self.TRAIN_SEG_PATH = os.path.join(root, 'train', 'seg')
@@ -215,7 +214,7 @@ class AC17_2DLoad():
             d = {"image":torch.from_numpy(img).float(),
                  "mask": (torch.from_numpy(seg),
                           self.mask_to_edges(seg)),
-                 "name":self.data[i]["name"],
+                 "name":self.data[i]["name"]}
             return d
 
         elif self.split == 'val' or self.deform == False:
@@ -223,7 +222,7 @@ class AC17_2DLoad():
             img = torch.cat([img, img, img], 0)
             d = {"image":img.float(),
                  "mask": (seg, self.mask_to_edges(seg)),
-                 "name":self.data[i]["name"],
+                 "name":self.data[i]["name"]}
             return d
 
 
