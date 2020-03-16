@@ -9,7 +9,7 @@ If you find our work helpful, please consider citing our work:
 ```
 @misc{sun2020saunet,
     title={SAUNet: Shape Attentive U-Net for Interpretable Medical Image Segmentation},
-    author={Jesse Sun and Fatemeh Darbeha and Mark Zaidi and Bo Wang},
+    author={Jesse Sun and Fatemeh Darbehani and Mark Zaidi and Bo Wang},
     year={2020},
     eprint={2001.07645},
     archivePrefix={arXiv},
