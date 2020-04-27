@@ -48,52 +48,29 @@ class SegmentationModuleBase(nn.Module):
         jaccard = (jaccard[1]+jaccard[2])/2
         return jaccard if jaccard <= 1 else 0
 
-    def pixel_acc(self, pred, label):
+    def pixel_acc(self, pred, label, num_class):
         _, preds = torch.max(pred, dim=1)
         valid = (label >= 1).long()
         acc_sum = torch.sum(valid * (preds == label).long())
         pixel_sum = torch.sum(valid)
 
         acc = acc_sum.float() / (pixel_sum.float() + 1e-10) #When you +falsePos, acc == Jaccard.
+        
+        jaccard = []
+         
+        # calculate jaccard for classes indexed 1 to num_class-1.
+        for i in range(1, num_class):
+            v = (label == i).long()
+            pred = (preds == i).long()
+            anb = torch.sum(v * pred)
+            try:
+                j = anb.float() / (torch.sum(v).float() + torch.sum(pred).float() - anb.float() + 1e-10)
+            except:
+                j = 0
 
-        #class 1
-        v1 = (label == 1).long()
-        pred1 = (preds == 1).long()
-        anb1 = torch.sum(v1 * pred1)
-        try:
-            j1 = anb1.float() / (torch.sum(v1).float() + torch.sum(pred1).float() - anb1.float() + 1e-10)
-        except:
-            j1 = 0
+            j = j if j <= 1 else 0
+            jaccard.append(j)
 
-        #class 2
-        v2 = (label == 2).long()
-        pred2 = (preds == 2).long()
-        anb2 = torch.sum(v2 * pred2)
-        try:
-            j2 = anb2.float() / (torch.sum(v2).float() + torch.sum(pred2).float() - anb2.float() + 1e-10)
-        except:
-            j2 = 0
-
-        if j1 > 1:
-            j1 = 0
-
-        if j2 > 1:
-            j2 = 0
-
-        #class 3
-        v3 = (label == 3).long()
-        pred3 = (preds == 3).long()
-        anb3 = torch.sum(v3 * pred3)
-        try:
-            j3 = anb3.float() / (torch.sum(v3).float() + torch.sum(pred3).float() - anb3.float() + 1e-10)
-        except:
-            j3 = 0
-
-        j1 = j1 if j1 <= 1 else 0
-        j2 = j2 if j2 <= 1 else 0
-        j3 = j3 if j3 <= 1 else 0
-
-        jaccard = [j1, j2, j3]
         return acc, jaccard
 
     def jaccard(self, pred, label):
@@ -101,17 +78,18 @@ class SegmentationModuleBase(nn.Module):
         return AnB/(pred.view(-1).sum().float() + label.view(-1).sum().float() - AnB)
 
 class SegmentationModule(SegmentationModuleBase):
-    def __init__(self, crit, unet):
+    def __init__(self, crit, unet, num_class):
         super(SegmentationModule, self).__init__()
         self.crit = crit
         self.unet = unet
+        self.num_class = num_class
 
     def forward(self, feed_dict, epoch, *, segSize=None):
         #training
         if segSize is None:
             p = self.unet(feed_dict['image'])
             loss = self.crit(p, feed_dict['mask'], epoch=epoch)
-            acc = self.pixel_acc(torch.round(nn.functional.softmax(p[0], dim=1)).long(), feed_dict['mask'][0].long().cuda())
+            acc = self.pixel_acc(torch.round(nn.functional.softmax(p[0], dim=1)).long(), feed_dict['mask'][0].long().cuda(), self.num_class)
             return loss, acc
 
         #test

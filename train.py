@@ -70,9 +70,10 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
     data_time = AverageMeter()
     ave_total_loss = AverageMeter()
     ave_acc = AverageMeter()
-    ave_j1 = AverageMeter()
-    ave_j2 = AverageMeter()
-    ave_j3 = AverageMeter()
+    ave_jaccards = []
+
+    for i in range(args.num_class-1):
+        ave_jaccards.append(AverageMeter())
 
     segmentation_module.train(not args.fix_bn)
 
@@ -112,33 +113,33 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
         # update average loss and acc
         ave_total_loss.update(loss.data.item())
         ave_acc.update(acc.data.item()*100)
-
-        ave_j1.update(jaccard[0].data.item()*100)
-        ave_j2.update(jaccard[1].data.item()*100)
-        ave_j3.update(jaccard[2].data.item()*100)
+        
+        for n, j in enumerate(ave_jaccards):
+            j.update(jaccard[n].data.item()*100)
 
         if iter_count % (args.batch_size_per_gpu*10) == 0:
             # calculate accuracy, and display
-            if args.unet==False:
-                print('Epoch: [{}][{}/{}], Time: {:.2f}, Data: {:.2f}, '
-                        'lr_encoder: {:.6f}, lr_decoder: {:.6f}, '
-                        'Accuracy: {:4.2f}, Loss: {:.6f}'
-                        .format(epoch, i, args.epoch_iters,
-                        batch_time.average(), data_time.average(),
-                        args.running_lr_encoder, args.running_lr_decoder,
-                        ave_acc.average(), ave_total_loss.average()))
-            else:
-                print('Epoch: [{}/{}], Iter: [{}], Time: {:.2f}, Data: {:.2f},'
-                        ' lr_unet: {:.6f}, Accuracy: {:4.2f}, Jaccard: [{:4.2f},{:4.2f},{:4.2f}], '
-                        'Loss: {:.6f}'
-                        .format(epoch, args.max_iters, iter_count,
-                            batch_time.average(), data_time.average(),
-                            args.running_lr_encoder, ave_acc.average(),
-                            ave_j1.average(), ave_j2.average(),
-                            ave_j3.average(), ave_total_loss.average()))
+            print('Epoch: [{}/{}], Iter: [{}], Time: {:.2f}, Data: {:.2f},'
+                ' lr_unet: {:.6f}, Accuracy: {:4.2f}, '
+                'Loss: {:.6f}, Jaccard: '
+                .format(epoch, args.max_iters, iter_count,
+                batch_time.average(), data_time.average(),
+                args.running_lr_encoder, ave_acc.average(),
+                ave_total_loss.average()), end= " ")
+
+            for i in range(len(ave_jaccards)):
+                if i == 0:
+                    print("[", end=" ")
+                print('{:4.2f}'.format(ave_jaccards[i].average()), end=" ")
+                if i == len(ave_jaccards) - 1:
+                    print("]")
+                
 
     #Average jaccard across classes.
-    j_avg = (ave_j1.average() + ave_j2.average() + ave_j3.average())/3
+    j_avg = 0
+    for j in ave_jaccards:
+        j_avg += j.average()
+    j_avg /= len(ave_jaccards)
 
     #Update the training history
     history['train']['epoch'].append(epoch)
@@ -230,7 +231,7 @@ def main(args):
 
     crit = DualLoss(mode="train")
 
-    segmentation_module = SegmentationModule(crit, unet)
+    segmentation_module = SegmentationModule(crit, unet, args.num_class)
 
     train_augs = Compose([PaddingCenterCrop(256), RandomHorizontallyFlip(), RandomVerticallyFlip(), RandomRotate(180)])
     test_augs = Compose([PaddingCenterCrop(256)])
@@ -292,8 +293,6 @@ def main(args):
         iou, loss = eval(loader_val, segmentation_module, args, crit)
         #checkpointing
         ckpted = False
-        if loss < 0.215:
-            ckpted = True
         if iou[0] > best_val['mIoU_1']:
             best_val['epoch_1'] = epoch
             best_val['mIoU_1'] = iou[0]
