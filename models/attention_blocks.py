@@ -235,5 +235,5 @@ class DualAttBlock(nn.Module):
         spatial = self.spatialAttn(fused)
         channel = self.channelAttn(fused)
         out = torch.mul(spatial.expand_as(channel) + 1, channel) # F(X) = C(X)*(1+S(X))
-        return fused, spatial
+        return out, spatial
 
