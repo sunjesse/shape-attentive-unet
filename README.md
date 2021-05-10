@@ -1,8 +1,8 @@
-Code for our paper "SAUNet: Shape Attentive U-Net for Interpretable Medical Image Segmentation": https://arxiv.org/pdf/2001.07645v3.pdf. Set to appear in MICCAI 2020.
+#Code for our paper "SAUNet: Shape Attentive U-Net for Interpretable Medical Image Segmentation": https://arxiv.org/pdf/2001.07645v3.pdf. (MICCAI 2020)
 
 ### Requirements
 The library dependencies can be downloaded by running 
-`pip3 install requirements.txt`
+`pip3 install requirements.txt`.
 
 ### Running the code
 To run the code, you can follow the steps below:
