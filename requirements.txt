@@ -1,0 +1,12 @@
+torch
+torchvision
+numpy
+pillow
+matplotlib
+opencv-python
+imageio
+nibabel
+scipy
+scikit-image
+glob3
+tqdm

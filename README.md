@@ -2,7 +2,7 @@
 
 ### Requirements
 The library dependencies can be downloaded by running 
-`pip3 install requirements.txt`.
+`pip3 install -r requirements.txt`.
 
 ### Running the code
 To run the code, you can follow the steps below:
