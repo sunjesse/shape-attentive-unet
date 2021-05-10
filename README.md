@@ -5,7 +5,7 @@ To run the code, you can follow the steps below:
 <ol>
 <li> Register on https://acdc.creatis.insa-lyon.fr/#challenges and download the ACDC - Segmentation dataset.</li>
 <li> Assign the root directory of the dataset to the DATA_ROOT variable at the bottom of train.py. Alternatively, you can fill the flag -data-root to the root directory each time you run the code.</li>
-<li> Run train.py using **python3 train.py**. </li>
+<li> Run train.py using </li> **python3 train.py**.
 </ol>
 If you find our work helpful, please consider citing our work: 
 
