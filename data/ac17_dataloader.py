@@ -74,8 +74,8 @@ class AC17Data(data.Dataset):
         self.split_len = int(200/self.k)
         self.k_split = int(k_split)
         self.augmentations = augmentations
-        self.TRAIN_IMG_PATH = os.path.join(root, 'train', 'img')
-        self.TRAIN_SEG_PATH = os.path.join(root, 'train', 'seg')
+        self.TRAIN_IMG_PATH = os.path.join(root, 'training')
+        self.TRAIN_SEG_PATH = os.path.join(root, 'training')
         self.list = self.read_files()
 
     def read_files(self):
@@ -104,11 +104,11 @@ class AC17Data(data.Dataset):
             return self.split_len
 
     def __getitem__(self, i): # i is index
-        filename = "patient%03d_frame%02d" % (self.list[i][0], self.list[i][1])
+        filename = "patient%03d/patient%03d_frame%02d" % (self.list[i][0], self.list[i][0], self.list[i][1])
         full_img_path = os.path.join(self.TRAIN_IMG_PATH, filename)
         full_seg_path = os.path.join(self.TRAIN_SEG_PATH, filename)
-        img = nibabel.load(full_img_path+".nii")
-        seg = nibabel.load(full_seg_path+"_gt.nii").get_data()
+        img = nibabel.load(full_img_path+".nii.gz")
+        seg = nibabel.load(full_seg_path+"_gt.nii.gz").get_data()
         pix_dim = img.header.structarr['pixdim'][1]
         img = np.array(img.get_data())
         seg = np.array(seg)
@@ -288,11 +288,11 @@ class AC17_2DLoad():
 
 if __name__ == '__main__':
 
-    DATA_DIR = "/PATH/TO/AC17/DATA"
-    augs = Compose([PaddingCenterCrop(352)])
-    dataset = AC17Data(DATA_DIR, augmentations=augs)
+    DATA_DIR = "/PATH/TO/TRAINING/FOLDER/" # path of the parent directory of the training folder. i.e. if /training is in /Users/Downloads, we set DATA_DIR = "/Users/Downloads"
+    augs = Compose([PaddingCenterCrop(256)])
+    dataset = AC17Data(DATA_DIR, augmentations=augs, split='val')
     ac17 = AC17_2DLoad(dataset)
     dloader = torch.utils.data.DataLoader(ac17,batch_size=10)
     for idx, batch in enumerate(dloader):
-        img, mask = batch['image'], batch['mask']
-        print(mask.shape, img.shape, mask.max(), mask.min(), img.max(), img.min())
+        img, mask, fname= batch['image'], batch['mask'], batch["name"]
+        print(fname, mask[0].shape, img.shape, mask[0].max(), mask[0].min(), img.max(), img.min())

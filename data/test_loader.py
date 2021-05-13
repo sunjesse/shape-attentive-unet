@@ -20,13 +20,14 @@ class AC17Test(data.Dataset):
     def __init__(self,
                  root,
                  augmentations=None,
+                 img_norm=True,
                  target_size=(256, 256)
                  ):
         self.target_size = target_size
         self.ROOT_PATH = root
-        self.img_norm = img_norm
         self.augmentations = augmentations
-        self.TRAIN_IMG_PATH = os.path.join(root, 'test')
+        self.img_norm = img_norm 
+        self.TEST_IMG_PATH = os.path.join(root, 'testing', 'testing')
         self.list = self.read_files()
 
     def read_files(self):
@@ -43,9 +44,9 @@ class AC17Test(data.Dataset):
         return 100
 
     def __getitem__(self, i): # i is index
-        filename = "patient%03d_frame%02d" % (self.list[i][0], self.list[i][1])
-        full_img_path = os.path.join(self.TRAIN_IMG_PATH, filename)
-        img = nibabel.load(full_img_path+".nii")
+        filename = "patient%03d/patient%03d_frame%02d" % (self.list[i][0], self.list[i][0], self.list[i][1])
+        full_img_path = os.path.join(self.TEST_IMG_PATH, filename)
+        img = nibabel.load(full_img_path+".nii.gz")
         pix_dim = img.header.structarr['pixdim'][1]
         img = np.array(img.get_data())
         orig = img
@@ -104,8 +105,8 @@ class AC17Test(data.Dataset):
         return img
 
 if __name__ == '__main__':
-    DATA_DIR = "/PATH/TO/AC17/DATA"
-    augs = ComposeTest([PaddingCenterCropTest(224)])
+    DATA_DIR = "/PATH/TO/TESTING/FOLDER" # path of the parent directory of the testing folder. i.e. if /testing is in /Users/Downloads, we set DATA_DIR = "/Users/Downloads"
+    augs = ComposeTest([PaddingCenterCropTest(256)])
     ac17 = AC17Test(DATA_DIR, augmentations=augs)
     dloader = torch.utils.data.DataLoader(ac17, batch_size=1)
     for idx, batch in enumerate(dloader):
