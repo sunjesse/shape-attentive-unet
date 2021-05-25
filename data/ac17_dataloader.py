@@ -104,7 +104,7 @@ class AC17Data(data.Dataset):
             return self.split_len
 
     def __getitem__(self, i): # i is index
-        filename = "patient%03d/patient%03d_frame%02d" % (self.list[i][0], self.list[i][0], self.list[i][1])
+        filename = "patient%03d\patient%03d_frame%02d" % (self.list[i][0], self.list[i][0], self.list[i][1])
         full_img_path = os.path.join(self.TRAIN_IMG_PATH, filename)
         full_seg_path = os.path.join(self.TRAIN_SEG_PATH, filename)
         img = nibabel.load(full_img_path+".nii.gz")
