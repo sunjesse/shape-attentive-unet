@@ -84,7 +84,7 @@ class SegmentationModule(SegmentationModuleBase):
         self.unet = unet
         self.num_class = num_class
 
-    def forward(self, feed_dict, epoch, *, segSize=None):
+    def forward(self, feed_dict, epoch, *, segSize=None, return_att=False):
         #training
         if segSize is None:
             p = self.unet(feed_dict['image'])
@@ -94,35 +94,19 @@ class SegmentationModule(SegmentationModuleBase):
 
         #test
         if segSize == True:
-            p = self.unet(feed_dict['image'])[0]
-            pred = nn.functional.softmax(p, dim=1)
-            return pred
+            if return_att:
+                p, maps = self.unet(feed_dict['image'], return_att=True)
+            else:
+                p = self.unet(feed_dict['image'], return_att=False)
+            pred = nn.functional.softmax(p[0], dim=1)
+            return pred, maps
 
         #inference
         else:
-            p = self.unet(feed_dict['image'])
+            p = self.unet(feed_dict['image'], return_att=return_att)
             loss = self.crit((p[0], p[1]), (feed_dict['mask'][0].long(), feed_dict['mask'][1]))
             pred = nn.functional.softmax(p[0], dim=1)
             return pred, loss
-
-    def SRP(self, model, pred, seg):
-        output = pred #actual output
-        _, pred = torch.max(nn.functional.softmax(pred, dim=1), dim=1) #class index prediction
-
-        tmp = []
-        for i in range(output.shape[1]):
-            tmp.append((pred == i).long().unsqueeze(1))
-        T_model = torch.cat(tmp, dim=1).float()
-
-        LRP = self.layer_relevance_prop(model, output * T_model)
-
-        return LRP
-
-    def layer_relevance_prop(self, model, R):
-        for l in range(len(model.layers), 0, -1):
-            print(model.layers[l-1])
-            R  = model.layers[l-1].relprop(R)
-        return R
 
 
 def conv3x3(in_planes, out_planes, stride=1, has_bias=False):
@@ -339,7 +323,7 @@ class SAUNet(nn.Module): #SAUNet
 
         self.final = nn.Conv2d(num_filters, self.num_classes, kernel_size=1)
 
-    def forward(self, x):
+    def forward(self, x, return_att=False):
         x_size = x.size()
 
         #Encoder
@@ -356,17 +340,17 @@ class SAUNet(nn.Module): #SAUNet
         c3 = F.interpolate(self.c3(conv3), x_size[2:],
                             mode='bilinear', align_corners=True)
         ss = self.d1(ss)
-        ss = self.gate1(ss, c3)
+        ss, g1 = self.gate1(ss, c3)
         ss = self.res2(ss)
         ss = self.d2(ss)
         c4 = F.interpolate(self.c4(conv4), x_size[2:],
                             mode='bilinear', align_corners=True)
-        ss = self.gate2(ss, c4)
+        ss, g2 = self.gate2(ss, c4)
         ss = self.res3(ss)
         ss = self.d3(ss)
         c5 = F.interpolate(self.c5(conv5), x_size[2:],
                             mode='bilinear', align_corners=True)
-        ss = self.gate3(ss, c5)
+        ss, g3 = self.gate3(ss, c5)
         ss = self.fuse(ss)
         ss = F.interpolate(ss, x_size[2:], mode='bilinear', align_corners=True)
         edge_out = self.sigmoid(ss)
@@ -390,18 +374,24 @@ class SAUNet(nn.Module): #SAUNet
         conv4 = F.interpolate(conv4, scale_factor=2, mode='bilinear', align_corners=True)
 
         center = self.center(self.pool(conv5))
-        dec5, _ = self.dec5([center, conv5])
-        dec4, _ = self.dec4([dec5, conv4])
-        dec3, att = self.dec3([dec4, conv3])
-        dec2, _ = self.dec2([dec3, conv2])
+        dec5, att5 = self.dec5([center, conv5])
+        dec4, att4 = self.dec4([dec5, conv4])
+        dec3, att3 = self.dec3([dec4, conv3])
+        dec2, att2 = self.dec2([dec3, conv2])
         dec1 = self.dec1(dec2)
         dec0 = self.dec0(torch.cat([dec1, edge], dim=1))
 
         x_out = self.final(dec0)
-
-        att = F.interpolate(att, scale_factor=4, mode='bilinear', align_corners=True)
-
-        return x_out, edge_out#, att
+        
+        att2 = F.interpolate(att2, scale_factor=2, mode='bilinear', align_corners=True)
+        att3 = F.interpolate(att3, scale_factor=4, mode='bilinear', align_corners=True)
+        att4 = F.interpolate(att4, scale_factor=8, mode='bilinear', align_corners=True)
+        att5 = F.interpolate(att5, scale_factor=16, mode='bilinear', align_corners=True)
+        
+        if return_att:
+            return x_out, edge_out, [att2, att3, att4, att5, g1, g2, g3]
+        
+        return x_out, edge_out
 
     def pad(self, x, y):
         diffX = y.shape[3] - x.shape[3]

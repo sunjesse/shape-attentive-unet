@@ -113,7 +113,11 @@ def evaluate(sm, loader_val, args):
                 feed_dict = batch_data.copy()
 
                 # forward pass
-                p1 = sm(slice_data, epoch=0, segSize=True)
+                if args.attention_map:
+                    # maps stores list of attention maps
+                    p1, maps = sm(slice_data, epoch=0, segSize=True, return_att=args.attention_map)
+                else:
+                    p1 = sm(slice_data, epoch=0, segSize=True, return_att=args.attention_map)
 
                 _, pred = torch.max(p1, dim=1)
                 pred = as_numpy(pred.squeeze(0).cpu())
@@ -212,6 +216,7 @@ if __name__ == '__main__':
     parser.add_argument('--show_SRmap', default=True, type=bool,
                         help='Show the saliency relevance mapping')
     parser.add_argument('--save_test_path', default='./test_files')
+    parser.add_argument('--attention_map', default='store_true')
 
     args = parser.parse_args()
 

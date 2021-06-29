@@ -54,7 +54,7 @@ class GatedSpatialConv2d(_ConvNd):
         alphas = self._gate_conv(torch.cat([input_features, gating_features], dim=1))
         input_features = (input_features * (alphas + 1)) 
         return F.conv2d(input_features, self.weight, self.bias, self.stride,
-                        self.padding, self.dilation, self.groups)
+                        self.padding, self.dilation, self.groups), alphas
   
     def reset_parameters(self):
         nn.init.xavier_normal_(self.weight)
