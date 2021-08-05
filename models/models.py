@@ -104,7 +104,7 @@ class SegmentationModule(SegmentationModuleBase):
         #inference
         else:
             p = self.unet(feed_dict['image'], return_att=return_att)
-            loss = self.crit((p[0], p[1]), (feed_dict['mask'][0].long(), feed_dict['mask'][1]))
+            loss = self.crit((p[0], p[1]), (feed_dict['mask'][0].long().unsqueeze(0), feed_dict['mask'][1].unsqueeze(0)))
             pred = nn.functional.softmax(p[0], dim=1)
             return pred, loss
 
