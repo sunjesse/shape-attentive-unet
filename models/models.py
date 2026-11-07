@@ -160,7 +160,7 @@ class ModelBuilder():
 
         if len(weights) > 0:
             unet.load_state_dict(
-                    torch.load(weights, map_location=lambda storage, loc: storage), strict=False)
+                    torch.load(weights, map_location=lambda storage, loc: storage, weights_only=True), strict=False)
             print("Loaded pretrained UNet weights.")
         print('Loaded weights for unet')
         return unet
